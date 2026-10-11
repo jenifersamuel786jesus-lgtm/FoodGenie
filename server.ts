@@ -767,8 +767,12 @@ async function startServer() {
 
   const PORT = 3000;
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`OrderIt Full-Stack Server listening on http://0.0.0.0:${PORT}`);
+    console.log(`FoodGenie Full-Stack Server listening on http://0.0.0.0:${PORT}`);
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
