@@ -11,6 +11,7 @@ import {
 } from '../../redux/actions/cartActions.ts';
 import { saveDeliveryInfo, setAppliedCoupon } from '../../redux/slices/cartSlice.ts';
 import { createOrder } from '../../redux/actions/orderActions.ts';
+import { initialCoupons } from '../../data/seedData.ts';
 import Message from '../Message.tsx';
 import {
   Plus,
@@ -42,7 +43,8 @@ export default function Cart() {
 
   const [couponInput, setCouponInput] = useState(appliedCoupon?.code || '');
   const [couponFeedback, setCouponFeedback] = useState<string | null>(null);
-  const [availableCoupons, setAvailableCoupons] = useState<AvailableCoupon[]>([]);
+  const [availableCoupons, setAvailableCoupons] =
+    useState<AvailableCoupon[]>(initialCoupons);
   const [paymentMethod, setPaymentMethod] = useState<string>('Card ·••• 4242');
   const [placingOrder, setPlacingOrder] = useState<boolean>(false);
 
@@ -55,7 +57,11 @@ export default function Cart() {
   useEffect(() => {
     axios
       .get('/api/v1/coupons')
-      .then(({ data }) => setAvailableCoupons(data.coupons || []))
+      .then(({ data }) => {
+        if (data && Array.isArray(data.coupons)) {
+          setAvailableCoupons(data.coupons);
+        }
+      })
       .catch(() => {});
   }, []);
 

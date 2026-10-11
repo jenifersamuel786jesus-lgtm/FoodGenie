@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { initialRestaurants } from '../../data/seedData.ts';
 
 export interface ReviewItem {
   _id: string;
@@ -35,11 +36,11 @@ interface RestaurantState {
 }
 
 const initialState: RestaurantState = {
-  restaurants: [],
+  restaurants: initialRestaurants,
   loading: false,
   error: null,
-  count: 0,
-  pureVegCount: 0,
+  count: initialRestaurants.length,
+  pureVegCount: initialRestaurants.filter((r) => r.isVeg).length,
   showVegOnly: false,
   sortBy: 'default',
   searchKeyword: '',
@@ -58,19 +59,30 @@ const restaurantSlice = createSlice({
       action: PayloadAction<{ count: number; restaurants: RestaurantItem[] }>
     ) {
       state.loading = false;
-      state.count = action.payload.count;
-      state.restaurants = action.payload.restaurants;
+      const list = Array.isArray(action.payload?.restaurants)
+        ? action.payload.restaurants
+        : initialRestaurants;
+      state.restaurants = list;
+      state.count =
+        typeof action.payload?.count === 'number' ? action.payload.count : list.length;
     },
     allRestaurantsFail(state, action: PayloadAction<string>) {
       state.loading = false;
       state.error = action.payload;
+      if (!Array.isArray(state.restaurants)) {
+        state.restaurants = initialRestaurants;
+      }
     },
     restaurantCountSuccess(
       state,
       action: PayloadAction<{ count: number; pureVegCount: number }>
     ) {
-      state.count = action.payload.count;
-      state.pureVegCount = action.payload.pureVegCount;
+      if (typeof action.payload?.count === 'number') {
+        state.count = action.payload.count;
+      }
+      if (typeof action.payload?.pureVegCount === 'number') {
+        state.pureVegCount = action.payload.pureVegCount;
+      }
     },
     toggleVegOnly(state) {
       state.showVegOnly = !state.showVegOnly;

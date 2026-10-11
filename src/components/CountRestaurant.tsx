@@ -6,7 +6,10 @@ export default function CountRestaurant() {
     (state: RootState) => state.restaurants
   );
 
-  const displayedCount = showVegOnly ? pureVegCount : restaurants.length || count;
+  const safeRestaurants = Array.isArray(restaurants) ? restaurants : [];
+  const displayedCount = showVegOnly
+    ? pureVegCount
+    : safeRestaurants.length || count;
   const label =
     displayedCount === 1
       ? showVegOnly

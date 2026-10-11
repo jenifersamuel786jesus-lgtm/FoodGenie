@@ -6,6 +6,7 @@ import { AppDispatch, RootState } from '../redux/store.ts';
 import { getRestaurants } from '../redux/actions/restaurantAction.ts';
 import { setVegOnly, setSortBy } from '../redux/slices/restaurantSlice.ts';
 import { addItemToCart } from '../redux/actions/cartActions.ts';
+import { getAllFoodItemsFlat } from '../data/seedData.ts';
 import CountRestaurant from './CountRestaurant.tsx';
 import Restaurant from './Restaurant.tsx';
 import Search from './layout/Search.tsx';
@@ -64,12 +65,68 @@ export default function Home() {
     dispatch(setSortBy(newSort));
   };
 
+  const buildClientSideRecommendations = (queryText: string) => {
+    const q = queryText.toLowerCase();
+    const allItems = getAllFoodItemsFlat().filter((item) => {
+      if (aiDietary === 'VEG') return item.isVeg;
+      if (aiDietary === 'NON_VEG') return !item.isVeg;
+      return true;
+    });
+
+    const scored = allItems.map((item) => {
+      let score = item.ratings * 10;
+      if (q.includes('pizza') && item.name.toLowerCase().includes('pizza')) score += 40;
+      if (q.includes('burger') && item.name.toLowerCase().includes('burger')) score += 40;
+      if (q.includes('fries') && item.name.toLowerCase().includes('fries')) score += 35;
+      if (
+        (q.includes('healthy') ||
+          q.includes('bowl') ||
+          q.includes('light') ||
+          q.includes('550') ||
+          q.includes('calorie')) &&
+        item.calories <= 560
+      ) {
+        score += 40;
+      }
+      if (
+        (q.includes('protein') ||
+          q.includes('workout') ||
+          q.includes('grill') ||
+          q.includes('skewer')) &&
+        (item.name.toLowerCase().includes('skewer') ||
+          item.name.toLowerCase().includes('steak') ||
+          item.name.toLowerCase().includes('burger'))
+      ) {
+        score += 35;
+      }
+      if (q.includes('pasta') && item.name.toLowerCase().includes('pasta')) score += 40;
+      return { item, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    return {
+      conciergeNote: `FoodGenie selected these top-rated ${
+        aiDietary === 'VEG' ? 'vegetarian ' : aiDietary === 'NON_VEG' ? 'chef-special ' : ''
+      }dishes matched to "${queryText}":`,
+      recommendations: scored.slice(0, 3).map(({ item }) => ({
+        itemId: item._id,
+        name: item.name,
+        restaurantName: item.restaurantName,
+        whyItMatches: `${item.description.split('.')[0]}. Freshly prepared in ${item.prepTime} (${item.calories} kcal, ${item.ratings}★).`,
+        pairingTip: item.isVeg
+          ? 'Pairs great with Warm Rosemary Garlic Bread or a chilled citrus drink.'
+          : 'Pairs wonderfully with Crispy Rosemary Parmesan Fries.',
+        foodItem: item,
+      })),
+    };
+  };
+
   const handleAskConcierge = async (e?: React.FormEvent, presetPrompt?: string) => {
     if (e) e.preventDefault();
     const queryToUse =
       presetPrompt ||
       cravingPrompt.trim() ||
-      'Recommend a wood-fired artisan dinner and an appetizer under 800 calories';
+      'Recommend a wood-fired dinner and a starter under 800 calories';
 
     try {
       setAiLoading(true);
@@ -78,13 +135,18 @@ export default function Home() {
         prompt: queryToUse,
         dietaryPreference: aiDietary,
       });
-      setAiNote(data.conciergeNote);
-      setAiRecs(data.recommendations || []);
-    } catch (err: any) {
-      setAiError(
-        err.response?.data?.message ||
-          'Unable to reach the AI Culinary Concierge right now.'
-      );
+      if (data && Array.isArray(data.recommendations) && data.recommendations.length > 0) {
+        setAiNote(data.conciergeNote);
+        setAiRecs(data.recommendations);
+      } else {
+        const localResult = buildClientSideRecommendations(queryToUse);
+        setAiNote(localResult.conciergeNote);
+        setAiRecs(localResult.recommendations);
+      }
+    } catch {
+      const localResult = buildClientSideRecommendations(queryToUse);
+      setAiNote(localResult.conciergeNote);
+      setAiRecs(localResult.recommendations);
     } finally {
       setAiLoading(false);
     }
@@ -259,7 +321,7 @@ export default function Home() {
             <Loader />
           ) : error ? (
             <Message variant="danger">{error}</Message>
-          ) : restaurants.length === 0 ? (
+          ) : !Array.isArray(restaurants) || restaurants.length === 0 ? (
             <div className="bg-white border border-stone-200 rounded-xl p-12 text-center">
               <p className="font-serif-display text-xl font-semibold text-stone-900">
                 No kitchens match your current filter
