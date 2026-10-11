@@ -1,0 +1,6 @@
+{
+  "name": "OrderIt — Artisanal Food Delivery & AI Culinary Concierge",
+  "description": "Full-stack food ordering platform featuring curated local restaurants, interactive menus, smart coupon checkout, real-time order tracking, and Gemini AI dish recommendations and review analysis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
