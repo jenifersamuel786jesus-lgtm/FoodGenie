@@ -4,9 +4,9 @@
  */
 
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
-import { AppDispatch } from './redux/store.ts';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
+import { AppDispatch, RootState } from './redux/store.ts';
 import { loadUser } from './redux/actions/userActions.ts';
 import { fetchCartItems } from './redux/actions/cartActions.ts';
 import Header from './components/layout/Header.tsx';
@@ -24,6 +24,7 @@ import UpdateProfile from './components/user/UpdateProfile.tsx';
 
 export default function App() {
   const dispatch = useDispatch<AppDispatch>();
+  const { isAuthenticated } = useSelector((state: RootState) => state.user);
 
   useEffect(() => {
     dispatch(loadUser());
@@ -36,16 +37,49 @@ export default function App() {
         <Header />
         <main className="flex-1">
           <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/eats/stores/:id/menus" element={<Menu />} />
-            <Route path="/cart" element={<Cart />} />
-            <Route path="/success" element={<OrderSuccess />} />
-            <Route path="/eats/orders/me/myOrders" element={<ListOrders />} />
-            <Route path="/eats/orders/:id" element={<OrderDetails />} />
+            {/* If not authenticated, first user starts directly on the Sign-In page alone */}
+            <Route
+              path="/"
+              element={isAuthenticated ? <Home /> : <Login />}
+            />
             <Route path="/users/login" element={<Login />} />
             <Route path="/users/signup" element={<Register />} />
-            <Route path="/users/me" element={<Profile />} />
-            <Route path="/users/me/update" element={<UpdateProfile />} />
+
+            {/* Protected Routes: accessible only once signed in */}
+            <Route
+              path="/eats/stores/:id/menus"
+              element={isAuthenticated ? <Menu /> : <Navigate to="/users/login" replace />}
+            />
+            <Route
+              path="/cart"
+              element={isAuthenticated ? <Cart /> : <Navigate to="/users/login" replace />}
+            />
+            <Route
+              path="/success"
+              element={isAuthenticated ? <OrderSuccess /> : <Navigate to="/users/login" replace />}
+            />
+            <Route
+              path="/eats/orders/me/myOrders"
+              element={isAuthenticated ? <ListOrders /> : <Navigate to="/users/login" replace />}
+            />
+            <Route
+              path="/eats/orders/:id"
+              element={isAuthenticated ? <OrderDetails /> : <Navigate to="/users/login" replace />}
+            />
+            <Route
+              path="/users/me"
+              element={isAuthenticated ? <Profile /> : <Navigate to="/users/login" replace />}
+            />
+            <Route
+              path="/users/me/update"
+              element={isAuthenticated ? <UpdateProfile /> : <Navigate to="/users/login" replace />}
+            />
+
+            {/* Catch-all fallback */}
+            <Route
+              path="*"
+              element={<Navigate to={isAuthenticated ? '/' : '/users/login'} replace />}
+            />
           </Routes>
         </main>
         <Footer />

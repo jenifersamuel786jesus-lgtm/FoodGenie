@@ -9,6 +9,8 @@ import {
   initialMenus,
   initialCoupons,
   GENERATED_IMAGES,
+} from './server/seedData.ts';
+import type {
   FoodItemData,
   RestaurantData,
   RestaurantMenu,
@@ -18,6 +20,15 @@ import {
   generateDishRecommendations,
   analyzeRestaurantReviews,
 } from './server/aiService.ts';
+import { connectMongoDB, getDatabaseStatus } from './server/db.ts';
+import { Restaurant } from './server/models/Restaurant.ts';
+import { Menu } from './server/models/Menu.ts';
+import { Order } from './server/models/Order.ts';
+import { User } from './server/models/User.ts';
+import { Coupon } from './server/models/Coupon.ts';
+import { securitySanitizerMiddleware } from './server/security.ts';
+import { createStripePaymentIntent } from './server/stripeService.ts';
+import mongoose from 'mongoose';
 
 dotenv.config();
 
@@ -28,6 +39,7 @@ const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
+app.use(securitySanitizerMiddleware);
 
 // In-memory state initialized from rich seed data
 const restaurants: RestaurantData[] = structuredClone(initialRestaurants);
@@ -51,29 +63,9 @@ interface UserAccount {
   };
 }
 
-const users: UserAccount[] = [
-  {
-    _id: 'user-demo-1',
-    name: 'Jenifer Samuel',
-    email: 'jenifer@foodgenie.com',
-    phoneNumber: '+1 (555) 234-8910',
-    avatar: {
-      public_id: 'avatar_demo',
-      url: GENERATED_IMAGES.avatar,
-    },
-    role: 'user',
-    createdAt: '2026-01-15T10:00:00.000Z',
-    defaultAddress: {
-      address: '742 Evergreen Terrace, Apt 4B',
-      city: 'San Francisco',
-      postalCode: '94107',
-      phoneNo: '+1 (555) 234-8910',
-      country: 'United States',
-    },
-  },
-];
+const users: UserAccount[] = [];
 
-let activeUser: UserAccount | null = users[0];
+let activeUser: UserAccount | null = null;
 
 interface CartEntry {
   fooditem: FoodItemData;
@@ -87,18 +79,9 @@ interface CartState {
 }
 
 let currentCart: CartState = {
-  user: 'user-demo-1',
-  restaurant: restaurants[0],
-  items: [
-    {
-      fooditem: menus[0].menu[0].items[0],
-      quantity: 1,
-    },
-    {
-      fooditem: menus[0].menu[1].items[0],
-      quantity: 1,
-    },
-  ],
+  user: '',
+  restaurant: null,
+  items: [],
 };
 
 export interface OrderRecord {
@@ -140,92 +123,7 @@ export interface OrderRecord {
   createdAt: string;
 }
 
-const orders: OrderRecord[] = [
-  {
-    _id: 'ORD-89421',
-    user: users[0],
-    restaurant: {
-      _id: 'rest-2',
-      name: 'Craft Burger Kitchen',
-      address: '18 Mercer Avenue, Midtown · Gourmet Burgers & Fries',
-      image: GENERATED_IMAGES.burger,
-    },
-    orderItems: [
-      {
-        fooditem: 'item-201',
-        name: 'Double Beef Truffle Burger',
-        price: 19,
-        quantity: 2,
-        image: GENERATED_IMAGES.burger,
-        isVeg: false,
-      },
-      {
-        fooditem: 'item-203',
-        name: 'Crispy Rosemary Parmesan Fries',
-        price: 9,
-        quantity: 1,
-        image: GENERATED_IMAGES.friesAndBread,
-        isVeg: true,
-      },
-    ],
-    deliveryInfo: users[0].defaultAddress,
-    itemsPrice: 47,
-    taxPrice: 3.76,
-    deliveryCharge: 0,
-    discountAmount: 9.4,
-    couponApplied: 'FEAST20',
-    finalTotal: 41.36,
-    paymentInfo: {
-      id: 'pay_stripe_982341',
-      status: 'Paid',
-      method: 'Card ·••• 4242',
-    },
-    orderStatus: 'Delivered',
-    createdAt: '2026-10-08T19:30:00.000Z',
-  },
-  {
-    _id: 'ORD-90114',
-    user: users[0],
-    restaurant: {
-      _id: 'rest-1',
-      name: 'The Wood-Fired Oven',
-      address: '42 Baker Street, Downtown · Wood-Fired Pizza Kitchen',
-      image: GENERATED_IMAGES.pizza,
-    },
-    orderItems: [
-      {
-        fooditem: 'item-101',
-        name: 'Classic Margherita Pizza',
-        price: 18,
-        quantity: 1,
-        image: GENERATED_IMAGES.pizza,
-        isVeg: true,
-      },
-      {
-        fooditem: 'item-105',
-        name: 'Warm Rosemary Garlic Bread & Herb Butter',
-        price: 11,
-        quantity: 1,
-        image: GENERATED_IMAGES.friesAndBread,
-        isVeg: true,
-      },
-    ],
-    deliveryInfo: users[0].defaultAddress,
-    itemsPrice: 29,
-    taxPrice: 2.32,
-    deliveryCharge: 3.5,
-    discountAmount: 5,
-    couponApplied: 'CHEF5',
-    finalTotal: 29.82,
-    paymentInfo: {
-      id: 'pay_stripe_990142',
-      status: 'Paid',
-      method: 'Apple Pay',
-    },
-    orderStatus: 'Preparing in Kitchen',
-    createdAt: '2026-10-11T07:45:00.000Z',
-  },
-];
+const orders: OrderRecord[] = [];
 
 function getAllFoodItemsFlat(): FoodItemData[] {
   const list: FoodItemData[] = [];
@@ -507,9 +405,55 @@ app.post('/api/v1/coupons/validate', (req, res) => {
 });
 
 // ==========================================
+// DATABASE (MONGODB) & SYSTEM HEALTH ROUTES
+// ==========================================
+app.get('/api/v1/db/status', async (_req, res) => {
+  const status = await getDatabaseStatus({
+    restaurants: restaurants.length,
+    menus: menus.length,
+    orders: orders.length,
+    users: users.length,
+    coupons: coupons.length,
+  });
+  res.json({
+    status: 'success',
+    database: status,
+  });
+});
+
+app.post('/api/v1/db/connect', async (req, res) => {
+  const { uri } = req.body;
+  if (uri && typeof uri === 'string') {
+    process.env.MONGODB_URI = uri.trim();
+  }
+  const result = await connectMongoDB();
+  const status = await getDatabaseStatus({
+    restaurants: restaurants.length,
+    menus: menus.length,
+    orders: orders.length,
+    users: users.length,
+    coupons: coupons.length,
+  });
+  res.json({
+    status: result.connected ? 'success' : 'warn',
+    message: result.message,
+    database: status,
+  });
+});
+
+// ==========================================
 // 5. AUTH & USER ROUTES (/api/v1/users)
 // ==========================================
-app.get('/api/v1/users/me', (_req, res) => {
+app.get('/api/v1/users/me', (req, res) => {
+  // Check if client provided a session email header or query parameter for session restore
+  const sessionEmail = (req.headers['x-user-email'] as string) || (req.query.email as string);
+  if (!activeUser && sessionEmail) {
+    const found = users.find((u) => u.email.toLowerCase() === sessionEmail.toLowerCase());
+    if (found) {
+      activeUser = found;
+    }
+  }
+
   if (!activeUser) {
     return res.status(401).json({ status: 'fail', message: 'Not logged in' });
   }
@@ -521,25 +465,66 @@ app.get('/api/v1/users/me', (_req, res) => {
 
 app.post('/api/v1/users/login', (req, res) => {
   const { email } = req.body;
-  let user = users.find((u) => u.email.toLowerCase() === String(email || '').toLowerCase());
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  if (!cleanEmail) {
+    return res.status(400).json({ success: false, message: 'Email is required' });
+  }
+
+  let user = users.find((u) => u.email.toLowerCase() === cleanEmail);
   if (!user) {
-    user = users[0];
+    const rawName = cleanEmail.split('@')[0].replace(/[._]/g, ' ') || 'Foodie Member';
+    const formattedName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+    user = {
+      _id: `user-${Date.now()}`,
+      name: formattedName,
+      email: cleanEmail,
+      phoneNumber: '',
+      avatar: {
+        public_id: 'avatar_user',
+        url: GENERATED_IMAGES.avatar,
+      },
+      role: 'user',
+      createdAt: new Date().toISOString(),
+      defaultAddress: {
+        address: '',
+        city: '',
+        postalCode: '',
+        phoneNo: '',
+        country: '',
+      },
+    };
+    users.push(user);
   }
   activeUser = user;
+  currentCart.user = user._id;
   res.json({
     status: 'success',
-    token: 'jwt-demo-token-orderit',
+    token: `jwt-${Date.now()}-auth`,
     user: activeUser,
   });
 });
 
 app.post('/api/v1/users/signup', (req, res) => {
   const { name, email, phoneNumber } = req.body;
+  const cleanEmail = String(email || '').trim().toLowerCase();
+
+  let existing = users.find((u) => u.email.toLowerCase() === cleanEmail);
+  if (existing) {
+    activeUser = existing;
+    currentCart.user = existing._id;
+    return res.json({
+      status: 'success',
+      token: `jwt-${Date.now()}-auth`,
+      user: existing,
+    });
+  }
+
+  const rawName = name?.trim() || cleanEmail.split('@')[0].replace(/[._]/g, ' ') || 'New Food Lover';
   const newUser: UserAccount = {
     _id: `user-${Date.now()}`,
-    name: name || 'New Food Lover',
-    email: email || 'diner@orderit.com',
-    phoneNumber: phoneNumber || '+1 (555) 019-2834',
+    name: rawName,
+    email: cleanEmail,
+    phoneNumber: phoneNumber?.trim() || '',
     avatar: {
       public_id: 'avatar_new',
       url: GENERATED_IMAGES.avatar,
@@ -547,15 +532,26 @@ app.post('/api/v1/users/signup', (req, res) => {
     role: 'user',
     createdAt: new Date().toISOString(),
     defaultAddress: {
-      address: '450 Artisan Boulevard',
-      city: 'San Francisco',
-      postalCode: '94102',
-      phoneNo: phoneNumber || '+1 (555) 019-2834',
-      country: 'United States',
+      address: '',
+      city: '',
+      postalCode: '',
+      phoneNo: phoneNumber?.trim() || '',
+      country: '',
     },
   };
   users.push(newUser);
   activeUser = newUser;
+  currentCart.user = newUser._id;
+  currentCart.items = [];
+  currentCart.restaurant = null;
+
+  // Persist to MongoDB if connected
+  if (mongoose.connection.readyState === 1) {
+    User.create(newUser).catch((e) =>
+      console.warn('[Database] User signup save warning:', e.message)
+    );
+  }
+
   res.status(201).json({
     status: 'success',
     token: 'jwt-demo-token-orderit',
@@ -565,42 +561,134 @@ app.post('/api/v1/users/signup', (req, res) => {
 
 app.get('/api/v1/users/logout', (_req, res) => {
   activeUser = null;
+  currentCart.items = [];
+  currentCart.restaurant = null;
   res.json({
     status: 'success',
     message: 'Logged out successfully',
   });
 });
 
-app.put('/api/v1/users/me/update', (req, res) => {
-  if (!activeUser) {
-    activeUser = users[0];
+app.put('/api/v1/users/me/update', async (req, res) => {
+  const sessionEmail =
+    (req.headers['x-user-email'] as string) ||
+    (req.body.email as string) ||
+    (req.query.email as string);
+
+  let targetUser = activeUser;
+  if (sessionEmail) {
+    const found = users.find(
+      (u) => u.email.toLowerCase() === sessionEmail.toLowerCase()
+    );
+    if (found) {
+      targetUser = found;
+      activeUser = found;
+    }
   }
-  const { name, email, phoneNumber, address, city, postalCode } = req.body;
-  if (name) activeUser.name = name;
-  if (email) activeUser.email = email;
-  if (phoneNumber) activeUser.phoneNumber = phoneNumber;
-  if (address) activeUser.defaultAddress.address = address;
-  if (city) activeUser.defaultAddress.city = city;
-  if (postalCode) activeUser.defaultAddress.postalCode = postalCode;
+
+  if (!targetUser) {
+    if (users.length > 0) {
+      targetUser = users[0];
+      activeUser = users[0];
+    } else {
+      const cleanEmail = sessionEmail || 'diner@foodgenie.com';
+      targetUser = {
+        _id: `user-${Date.now()}`,
+        name: cleanEmail.split('@')[0],
+        email: cleanEmail,
+        phoneNumber: '',
+        avatar: { public_id: 'avatar_custom', url: GENERATED_IMAGES.avatar },
+        role: 'user',
+        createdAt: new Date().toISOString(),
+        defaultAddress: {
+          address: '',
+          city: '',
+          postalCode: '',
+          phoneNo: '',
+          country: 'United States',
+        },
+      };
+      users.push(targetUser);
+      activeUser = targetUser;
+    }
+  }
+
+  const { name, email, phoneNumber, address, city, postalCode, avatar } = req.body;
+  if (name) targetUser.name = name;
+  if (email) targetUser.email = email;
+  if (phoneNumber) targetUser.phoneNumber = phoneNumber;
+  if (!targetUser.defaultAddress) {
+    targetUser.defaultAddress = {
+      address: '',
+      city: '',
+      postalCode: '',
+      phoneNo: '',
+      country: 'United States',
+    };
+  }
+  if (address !== undefined) targetUser.defaultAddress.address = address;
+  if (city !== undefined) targetUser.defaultAddress.city = city;
+  if (postalCode !== undefined) targetUser.defaultAddress.postalCode = postalCode;
+  if (avatar) {
+    if (typeof avatar === 'string') {
+      targetUser.avatar = { public_id: 'avatar_custom', url: avatar };
+    } else if (avatar && avatar.url) {
+      targetUser.avatar = {
+        public_id: avatar.public_id || 'avatar_custom',
+        url: avatar.url,
+      };
+    }
+  }
+
+  // Update in MongoDB if connected
+  if (mongoose.connection.readyState === 1) {
+    try {
+      await User.findByIdAndUpdate(targetUser._id, targetUser, { upsert: true });
+    } catch (e: any) {
+      console.warn('[Database] User sync warning:', e.message);
+    }
+  }
 
   res.json({
     status: 'success',
-    user: activeUser,
+    user: targetUser,
   });
 });
 
 // ==========================================
-// 6. ORDERS & PAYMENT ROUTES (/api/v1/eats/orders)
 // ==========================================
-app.post('/api/v1/payment/process', (req, res) => {
-  const { amount } = req.body;
-  res.json({
-    success: true,
-    client_secret: `pi_${Date.now()}_secret_${Math.round((Number(amount) || 20) * 100)}`,
-  });
+// 6. STRIPE PAYMENT & ORDERS ROUTES (/api/v1/eats/orders)
+// ==========================================
+app.post('/api/v1/payment/stripe-intent', async (req, res) => {
+  try {
+    const { amount, currency = 'usd', orderId } = req.body;
+    const amountVal = Number(amount) || 20;
+    const result = await createStripePaymentIntent(amountVal, currency, { orderId });
+    res.json(result);
+  } catch (error: any) {
+    console.error('Stripe Payment Intent Error:', error);
+    res.status(500).json({ success: false, message: error?.message || 'Payment processing error' });
+  }
 });
 
-app.post('/api/v1/eats/orders/new', (req, res) => {
+app.post('/api/v1/payment/process', async (req, res) => {
+  try {
+    const { amount, paymentMethodId } = req.body;
+    const amountVal = Number(amount) || 20;
+    const intent = await createStripePaymentIntent(amountVal, 'usd', { paymentMethodId });
+    res.json({
+      success: true,
+      client_secret: intent.clientSecret,
+      paymentIntentId: intent.paymentIntentId,
+      mode: intent.mode,
+      amount: amountVal,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error?.message || 'Payment error' });
+  }
+});
+
+app.post('/api/v1/eats/orders/new', async (req, res) => {
   const {
     deliveryInfo,
     orderItems,
@@ -619,9 +707,28 @@ app.post('/api/v1/eats/orders/new', (req, res) => {
     currentCart.restaurant ||
     restaurants[0];
 
+  const orderId = `ORD-${Math.floor(10000 + Math.random() * 90000)}`;
+
+  const currentUserRecord: UserAccount = activeUser || (users.length > 0 ? users[0] : {
+    _id: `user-${Date.now()}`,
+    name: 'FoodGenie Diner',
+    email: 'diner@foodgenie.com',
+    phoneNumber: '',
+    avatar: { public_id: 'avatar_default', url: GENERATED_IMAGES.avatar },
+    role: 'user',
+    createdAt: new Date().toISOString(),
+    defaultAddress: {
+      address: deliveryInfo?.address || '',
+      city: deliveryInfo?.city || '',
+      postalCode: deliveryInfo?.postalCode || '',
+      phoneNo: deliveryInfo?.phoneNo || '',
+      country: 'United States',
+    },
+  });
+
   const newOrder: OrderRecord = {
-    _id: `ORD-${Math.floor(10000 + Math.random() * 90000)}`,
-    user: activeUser || users[0],
+    _id: orderId,
+    user: currentUserRecord,
     restaurant: {
       _id: targetRest._id,
       name: targetRest.name,
@@ -639,7 +746,7 @@ app.post('/api/v1/eats/orders/new', (req, res) => {
             image: entry.fooditem.images[0]?.url || GENERATED_IMAGES.feast,
             isVeg: entry.fooditem.isVeg,
           })),
-    deliveryInfo: deliveryInfo || (activeUser || users[0]).defaultAddress,
+    deliveryInfo: deliveryInfo || currentUserRecord.defaultAddress,
     itemsPrice: Number(itemsPrice) || 0,
     taxPrice: Number(taxPrice) || 0,
     deliveryCharge: Number(deliveryCharge) || 0,
@@ -647,18 +754,28 @@ app.post('/api/v1/eats/orders/new', (req, res) => {
     couponApplied: couponApplied || undefined,
     finalTotal: Number(finalTotal) || 0,
     paymentInfo: paymentInfo || {
-      id: `pay_${Date.now()}`,
+      id: `pi_stripe_${Date.now()}`,
       status: 'Paid',
-      method: 'Instant Online Checkout',
+      method: 'Stripe Online Checkout',
     },
     orderStatus: 'Order Confirmed',
     createdAt: new Date().toISOString(),
   };
 
   orders.unshift(newOrder);
+
   // Clear cart after order creation
   currentCart.items = [];
   currentCart.restaurant = null;
+
+  // Persist to MongoDB if connected
+  if (mongoose.connection.readyState === 1) {
+    try {
+      await Order.create(newOrder);
+    } catch (e: any) {
+      console.warn('[Database] MongoDB order persist warning:', e.message);
+    }
+  }
 
   res.status(201).json({
     status: 'success',
@@ -666,19 +783,37 @@ app.post('/api/v1/eats/orders/new', (req, res) => {
   });
 });
 
-app.get('/api/v1/eats/orders/me/myOrders', (_req, res) => {
+app.get('/api/v1/eats/orders/me/myOrders', (req, res) => {
+  const userEmail = (req.headers['x-user-email'] as string) || activeUser?.email;
+  const userOrders = activeUser
+    ? orders.filter(
+        (o) =>
+          o.user?._id === activeUser?._id ||
+          (userEmail && o.user?.email === userEmail)
+      )
+    : [];
+
   res.json({
     status: 'success',
-    count: orders.length,
-    orders,
+    count: userOrders.length,
+    orders: userOrders,
   });
 });
 
-app.get('/api/v1/eats/orders/:id', (req, res) => {
-  const order = orders.find((o) => o._id === req.params.id);
+app.get('/api/v1/eats/orders/:id', async (req, res) => {
+  let order = orders.find((o) => o._id === req.params.id);
+
+  if (!order && mongoose.connection.readyState === 1) {
+    try {
+      const dbOrder = await Order.findOne({ _id: req.params.id }).lean();
+      if (dbOrder) order = dbOrder as any;
+    } catch {}
+  }
+
   if (!order) {
     return res.status(404).json({ status: 'fail', message: 'Order not found' });
   }
+
   res.json({
     status: 'success',
     order,
@@ -750,6 +885,11 @@ app.post('/api/v1/ai/analyze-reviews', async (req, res) => {
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
 
+  // Connect to MongoDB Atlas / cluster if MONGODB_URI is provided
+  connectMongoDB().catch((err) => {
+    console.log('[Database] MongoDB background initialization:', err.message);
+  });
+
   if (!isProd) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
@@ -773,6 +913,9 @@ async function startServer() {
 
 if (!process.env.VERCEL) {
   startServer();
+} else {
+  // On Vercel serverless functions, initiate connection once per cold start
+  connectMongoDB().catch(() => {});
 }
 
 export default app;

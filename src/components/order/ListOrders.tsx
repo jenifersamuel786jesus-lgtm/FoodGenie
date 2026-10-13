@@ -100,11 +100,11 @@ export default function ListOrders() {
                       </td>
                       <td className="py-4 px-5 text-xs font-medium whitespace-nowrap">
                         <span
-                          className={
+                          className={`inline-flex items-center gap-1.5 ${
                             order.orderStatus === 'Delivered'
-                              ? 'text-emerald-700'
-                              : 'text-amber-800'
-                          }
+                              ? 'text-emerald-700 font-semibold'
+                              : 'text-stone-900 font-medium'
+                          }`}
                         >
                           {order.orderStatus}
                         </span>
@@ -112,9 +112,9 @@ export default function ListOrders() {
                       <td className="py-4 px-5 text-right whitespace-nowrap">
                         <Link
                           to={`/eats/orders/${order._id}`}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-stone-900 hover:text-amber-800 transition-colors"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-stone-900 hover:text-[#D94E1F] transition-colors"
                         >
-                          <span>Inspect</span>
+                          <span>Receipt</span>
                           <ArrowUpRight className="w-3.5 h-3.5" />
                         </Link>
                       </td>

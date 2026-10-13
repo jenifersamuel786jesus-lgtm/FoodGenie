@@ -142,8 +142,8 @@ interface OrderState {
 }
 
 const initialState: OrderState = {
-  orders: seededOrders,
-  orderDetails: seededOrders[0],
+  orders: [],
+  orderDetails: null,
   latestCreatedOrder: null,
   loading: false,
   error: null,

@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import { FoodItemData, RestaurantData } from './seedData.ts';
+import type { FoodItemData, RestaurantData } from './seedData.ts';
 
 const CANDIDATE_MODELS = [
   'gemini-3.8-flash',

@@ -36,9 +36,10 @@ export default function Search() {
           type="text"
           value={inputVal}
           onChange={(e) => {
-            setInputVal(e.target.value);
-            dispatch(setSearchKeyword(e.target.value));
-            dispatch(getRestaurants(e.target.value, showVegOnly, sortBy));
+            const clean = e.target.value.replace(/['";\\<>{}]/g, '').slice(0, 80);
+            setInputVal(clean);
+            dispatch(setSearchKeyword(clean));
+            dispatch(getRestaurants(clean, showVegOnly, sortBy));
           }}
           placeholder="Search restaurants, pizza, burgers, pasta, salads..."
           className="w-full pl-10 pr-20 py-2.5 text-sm bg-white border border-stone-300 rounded-lg text-stone-900 placeholder:text-stone-400 focus:outline-none focus:border-stone-900 transition-colors"

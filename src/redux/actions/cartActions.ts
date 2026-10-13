@@ -30,14 +30,11 @@ export const fetchCartItems = () => async (dispatch: AppDispatch, getState: () =
   }
 
   const current = getState().cart;
-  if (!Array.isArray(current.cartItems) || current.cartItems.length === 0) {
+  if (!Array.isArray(current.cartItems)) {
     dispatch(
       setCartData({
-        items: [
-          { fooditem: initialMenus[0].menu[0].items[0], quantity: 1 },
-          { fooditem: initialMenus[0].menu[1].items[0], quantity: 1 },
-        ],
-        restaurant: initialRestaurants[0],
+        items: [],
+        restaurant: null,
       })
     );
   }

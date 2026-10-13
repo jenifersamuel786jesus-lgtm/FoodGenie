@@ -5,7 +5,7 @@ import { AppDispatch, RootState } from '../../redux/store.ts';
 import { getOrderDetails } from '../../redux/actions/orderActions.ts';
 import Loader from '../layout/Loader.tsx';
 import Message from '../Message.tsx';
-import { ArrowLeft, ArrowUpRight } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, CheckCircle2, Utensils } from 'lucide-react';
 
 export default function OrderDetails() {
   const { id } = useParams<{ id: string }>();
@@ -31,6 +31,7 @@ export default function OrderDetails() {
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-10 space-y-8">
+      {/* Top Navigation */}
       <div className="flex items-center justify-between">
         <Link
           to="/eats/orders/me/myOrders"
@@ -42,15 +43,16 @@ export default function OrderDetails() {
 
         <Link
           to={`/eats/stores/${order.restaurant._id}/menus`}
-          className="inline-flex items-center gap-1 text-xs font-semibold text-stone-900 hover:text-amber-800 transition-colors"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-stone-900 hover:text-[#D94E1F] transition-colors"
         >
           <span>Visit {order.restaurant.name} Menu</span>
           <ArrowUpRight className="w-3.5 h-3.5" />
         </Link>
       </div>
 
-      {/* Order Header Card */}
-      <div className="bg-white border border-stone-200/90 rounded-xl p-6 md:p-8 space-y-6">
+      {/* Main Order Card */}
+      <div className="bg-white border border-stone-200/90 rounded-2xl p-6 md:p-8 space-y-6 shadow-sm">
+        {/* Order Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-stone-200">
           <div>
             <div className="flex items-center gap-2 text-xs text-stone-500 mb-1">
@@ -78,19 +80,14 @@ export default function OrderDetails() {
 
           <div className="text-left sm:text-right">
             <p className="text-xs text-stone-500">Fulfillment Status</p>
-            <p
-              className={`text-sm font-semibold mt-0.5 ${
-                order.orderStatus === 'Delivered'
-                  ? 'text-emerald-700'
-                  : 'text-amber-800'
-              }`}
-            >
-              {order.orderStatus}
-            </p>
+            <div className="inline-flex items-center gap-1.5 mt-0.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{order.orderStatus}</span>
+            </div>
           </div>
         </div>
 
-        {/* Delivery & Payment Metadata */}
+        {/* Delivery Destination & Payment Details */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm pb-6 border-b border-stone-200">
           <div>
             <p className="text-xs font-semibold text-stone-500 mb-1">
@@ -148,6 +145,7 @@ export default function OrderDetails() {
                     </p>
                   </div>
                 </div>
+
                 <span className="text-sm font-semibold text-stone-950 tabular-nums">
                   ${(item.price * item.quantity).toFixed(2)}
                 </span>
